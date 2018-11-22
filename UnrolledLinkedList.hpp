@@ -77,6 +77,8 @@ namespace std {
         Node* appendNewTailNode();
         Node* appendNewHeadNode();
         Node* insertNewNodeAt(unsigned int);
+        Node* mostLeftNode();
+        Node* mostRightNode();
         
         void deleteNode(Node*);
         Node* nodeAt(unsigned int);
@@ -157,34 +159,59 @@ namespace std {
     
     // ULL class
     
-    _TEMPL typename UnrolledLinkedList<T, nodeSize>::Node* _ULL::appendNewTailNode() {
-        Node *newNode = new Node;
+    // private
+    _IMPL(typename _ULL::Node*) appendNewTailNode() {
+        ++_nodeCount;
         
-        if(!_head) {
-            _head = _tail = newNode;
-        } else if(!_tail -> _next) {
-            _tail -> _next = newNode;
-            newNode -> _prev = _tail;
-            _tail = newNode;
+        if(!_tail) { // case of complete emptyness
+            return _head = _tail = new Node;
+        } else if(_tail -> _next) { // there is a buffer node, use this instead of new Node
+            return _tail = _tail -> _next;
+        } else { // theres no buffer node, a new Node must be appended
+            Node * newNode = new Node;
+            link(_tail, newNode);
+            return _tail = newNode;
         }
         
-        ++_nodeCount;
-        return newNode;
+//        Node *newNode = new Node;
+//
+//        if(!_head) {
+//            _head = _tail = newNode;
+//        } else if(!_tail -> _next) {
+//            _tail -> _next = newNode;
+//            newNode -> _prev = _tail;
+//            _tail = newNode;
+//        }
+//
+//        ++_nodeCount;
+//        return newNode;
     }
     
-    _TEMPL typename UnrolledLinkedList<T, nodeSize>::Node* UnrolledLinkedList<T, nodeSize>::appendNewHeadNode() {
-        Node* newNode = new Node;
+    _IMPL(typename _ULL::Node*) appendNewHeadNode() {
+        ++_nodeCount;
         
-        if(!_head) {
-            _head = _tail = newNode;
-        } else if(!_head -> _prev) {
-            newNode -> _next = _head;
-            _head -> _prev = newNode;
-            _tail = newNode;
+        if(!_head) { // emptyness
+            return _head = _tail = new Node;
+        } else if(_head -> _prev) {
+            return _head = _head -> _prev;
+        } else {
+            Node * newNode = new Node;
+            link(newNode, _head);
+            return _head = newNode;
         }
         
-        ++_nodeCount;
-        return newNode;
+//        Node* newNode = new Node;
+//
+//        if(!_head) {
+//            _head = _tail = newNode;
+//        } else if(!_head -> _prev) {
+//            newNode -> _next = _head;
+//            _head -> _prev = newNode;
+//            _tail = newNode;
+//        }
+//
+//        ++_nodeCount;
+//        return newNode;
     }
     
     _TEMPL void UnrolledLinkedList<T, nodeSize>::deleteNode(Node* node) {
@@ -205,7 +232,7 @@ namespace std {
         delete node;
     }
     
-    _TEMPL typename UnrolledLinkedList<T, nodeSize>::Node* UnrolledLinkedList<T, nodeSize>::insertNewNodeAt(unsigned int at) {
+    _TEMPL typename _ULL::Node* UnrolledLinkedList<T, nodeSize>::insertNewNodeAt(unsigned int at) {
         if(_nodeCount == 0) {
             return _head = _tail = new Node;
         } else if(at == 0) {
@@ -220,7 +247,7 @@ namespace std {
         ++_nodeCount;
     }
     
-    _TEMPL typename UnrolledLinkedList<T, nodeSize>::Node* _ULL::nodeAt(unsigned int at) {
+    _TEMPL typename _ULL::Node* _ULL::nodeAt(unsigned int at) {
         if(isInBounds(0, _nodeCount, at)) {
             Node* current = _head;
             for(unsigned int i = 0; i < at; i++) {
@@ -245,6 +272,22 @@ namespace std {
                 i = check;
             }
         }
+    }
+    
+    _IMPL(typename _ULL::Node*) mostLeftNode() {
+        Node * current = _head;
+        while(current -> _prev) {
+            current = current -> _prev;
+        }
+        return current;
+    }
+    
+    _IMPL(typename _ULL::Node*) mostRightNode() {
+        Node * current = _tail;
+        while(current -> _next) {
+            current = current -> _next;
+        }
+        return current;
     }
     
     _TEMPL inline bool _ULL::isFull(Node * node) {
