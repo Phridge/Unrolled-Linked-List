@@ -82,8 +82,6 @@ namespace std {
         Node* appendNewTailNode();
         Node* appendNewHeadNode();
         Node* insertNewNodeAt(unsigned int);
-        Node* mostLeftNode();
-        Node* mostRightNode();
         
         void deleteNode(Node*);
         Node* nodeAt(unsigned int);
@@ -147,7 +145,7 @@ namespace std {
         } else {
             T& oldData = _data[index];
             for(byte i = index +1; i < _size; i++) {
-                _data[i - 1] = _data[i];
+                _data[i - 1] = _data[i]; // same as above make this better (with move semantics)
             }
             --_size;
             return oldData;
@@ -271,7 +269,7 @@ namespace std {
         if(_cache) // if theres some space for cached resources, dont destroy
             delete node;
         else {
-            ~node();
+            node -> clear();
             pushResource(node);
         }
     }
@@ -309,7 +307,7 @@ namespace std {
         }
     }
     
-    _TEMPL typename UnrolledLinkedList<T, nodeSize>::Node* _ULL::nodeAtIndex(unsigned int index) {
+    _IMPL(typename _ULL::Node *) nodeAtIndex(unsigned int index) {
         if(isInBounds(0, _size, index)) {
             
             Node* current = _head;
@@ -326,36 +324,20 @@ namespace std {
         }
     }
     
-    _IMPL(typename _ULL::Node*) mostLeftNode() {
-        Node * current = _head;
-        while(current -> _prev) {
-            current = current -> _prev;
-        }
-        return current;
-    }
-    
-    _IMPL(typename _ULL::Node*) mostRightNode() {
-        Node * current = _tail;
-        while(current -> _next) {
-            current = current -> _next;
-        }
-        return current;
-    }
-    
-    _TEMPL inline bool _ULL::isFull(Node * node) {
+    _IMPL(inline bool) isFull(Node * node) {
         return node == nullptr || node -> _size == nodeSize;
     }
     
-    _TEMPL inline bool _ULL::isEmpty(Node * node) {
+    _IMPL(inline bool) isEmpty(Node * node) {
         return node != nullptr && node -> _size == 0;
     }
     
-    _TEMPL inline void UnrolledLinkedList<T, nodeSize>::link(Node * left, Node * right) {
+    _IMPL(inline void) link(Node * left, Node * right) {
         left -> _next = right;
         right -> _prev = left;
     }
     
-    _TEMPL inline void UnrolledLinkedList<T, nodeSize>::unlink(Node * left, Node * right) {
+    _IMPL(inline void) unlink(Node * left, Node * right) {
         left -> _next = right -> _prev = nullptr;
     }
     
@@ -369,33 +351,41 @@ namespace std {
     _TEMPL UnrolledLinkedList<T, nodeSize>::UnrolledLinkedList(unsigned int initialCapacity) {
         if(initialCapacity > 0) {
             for(unsigned int i = 0, stop = (initialCapacity / nodeSize) +1; i < stop; i++)
-                appendNewTailNode();
+                pushResource();
         }
     }
     
-    _TEMPL _ULL::~UnrolledLinkedList<T, nodeSize>() {
-        if(_head != nullptr) {
-            Node* current = _head -> _prev? _head -> _prev : _head;
+    _TEMPL _ULL::~UnrolledLinkedList<T, nodeSize>() { // like clear(), just cheaper
+        if(_head) { // clearing node snake
+            Node* current = _head;
             
-            while(current != nullptr) {
+            while(current) {
                 Node* temp = current;
                 current = current -> _next;
                 delete temp;
             }
         }
+        
+        while(_cache) { // clearing cache
+            Node * temp = _cache;
+            _cache = _cache -> _next;
+            delete temp;
+        }
     }
     
-    _TEMPL UnrolledLinkedList<T, nodeSize>& UnrolledLinkedList<T, nodeSize>::pushBack (const T& obj) {
-        if(isFull(_tail)) {
-            Node* appended = _tail -> _next? _tail -> _next : appendNewTailNode(); // use dead tail if possible
-            appended -> push(obj);
-            _tail = appended;
-        } else {
-            _tail -> push(obj);
-        }
+    _IMPL(_ULL&) pushBack (const T& obj) {
+        if(isFull(_tail))
+            appendNewTailNode();
+        _tail -> push(obj);
         
+//        if(isFull(_tail)) {
+//            Node* appended = _tail -> _next? _tail -> _next : appendNewTailNode(); // use dead tail if possible
+//            appended -> push(obj);
+//            _tail = appended;
+//        } else {
+//            _tail -> push(obj);
+//        }
         ++_size;
-        
         return *this;
     }
     
@@ -408,7 +398,9 @@ namespace std {
         if(_size > 0) {
             T& value = _tail -> pop();
             
-            if(_tail -> _size == 0) {
+            if(isEmpty(_tail))
+                deleteNode(_tail);
+            /*if(_tail -> _size == 0) {
                 Node* newTail = _tail -> _prev;
                 Node* deadTail = _tail -> _next;
                 
@@ -420,23 +412,24 @@ namespace std {
                 if(newTail) {
                     _tail = newTail;
                 }
-            }
-            
+            }*/
+            --_size;
             return value;
         }
     }
     
     _TEMPL UnrolledLinkedList<T, nodeSize>& _ULL::pushFront(const T& item) {
-        if(isFull(_head)) {
+        if(isFull(_head))
+            appendNewHeadNode();
+        _head -> insert(0, item);
+        /*if(isFull(_head)) {
             Node* appended = _head -> _prev? _head -> _prev : appendNewHeadNode();
             appended -> insert(0, item);
             _head = appended;
         } else {
             _head -> insert(0, item);
-        }
-        
+        }*/
         ++_size;
-        
         return *this;
     }
     
@@ -447,7 +440,10 @@ namespace std {
     
     _TEMPL T& UnrolledLinkedList<T, nodeSize>::popFront() {
         if(_size > 0) {
-            
+            T& data = _head -> remove(0);
+            if(isEmpty(_head))
+                deleteNode(_head);
+            --_size;
         }
     }
     
@@ -464,8 +460,15 @@ namespace std {
         return operator[] (index);
     }
     
+    // clears cache as well
     _IMPL(void) clear() {
-        if(_head != nullptr) {
+        bufferedClear();
+        while(_cache) {
+            Node * temp = _cache;
+            _cache = _cache -> _next;
+            delete temp;
+        }
+        /*if(_head != nullptr) {
             Node * current = _head -> _prev? _head -> _prev : _head;
             
             while(current != nullptr) {
@@ -476,11 +479,22 @@ namespace std {
             
             _nodeCount = _size = 0;
             _head = _tail = nullptr;
-        }
+        }*/
     }
     
     _IMPL(void) bufferedClear() {
         if(_head) {
+            for(Node * current = _head; current; ) {
+                Node * temp = current;
+                current = current -> _next;
+                delete temp;
+            }
+        }
+        
+        _nodeCount = 0;
+        _size = 0;
+        
+        /*if(_head) {
             Node * keep, * current = _head;
             
             if(_head -> _prev) {
@@ -501,7 +515,7 @@ namespace std {
             _nodeCount = 1;
             
             _head = _tail = keep;
-        }
+        }*/
     }
     
     _IMPL(string) toString() const {
