@@ -60,6 +60,7 @@ namespace std {
             ~Node() {
                 delete [] _data;
             }
+            void clear();
             
             inline void push(const T&);
             inline T& pop();
@@ -71,8 +72,12 @@ namespace std {
             inline const T& operator [] (byte) const;
         };
         
-        Node* _head, * _tail;
+        Node * _head, * _tail, * _cache;
         unsigned int _size, _nodeCount;
+        
+        Node * popResource();
+        void pushResource(Node *);
+        inline Node * newNode();
         
         Node* appendNewTailNode();
         Node* appendNewHeadNode();
@@ -157,20 +162,44 @@ namespace std {
         return _data[index];
     }
     
+    _IMPL(void) Node::clear() {
+        for(byte i = 0; i < _size; i++) {
+            ~_data[i]();
+        }
+        _size = 0;
+    }
+    
     // ULL class
     
     // private
+    
+    _IMPL(typename _ULL::Node*) popResource() {
+        Node * temp = _cache;
+        _cache = _cache -> _next;
+        return temp;
+    }
+    
+    _IMPL(void) pushResource(Node * res) {
+        if(_cache) {
+            res -> _next = _cache;
+        }
+        _cache = res;
+    }
+    
+    _IMPL(inline typename _ULL::Node *) newNode() {
+        return _cache? popResource() : new Node;
+    }
+    
     _IMPL(typename _ULL::Node*) appendNewTailNode() {
         ++_nodeCount;
         
+        Node * append = newNode();
+        
         if(!_tail) { // case of complete emptyness
-            return _head = _tail = new Node;
-        } else if(_tail -> _next) { // there is a buffer node, use this instead of new Node
-            return _tail = _tail -> _next;
-        } else { // theres no buffer node, a new Node must be appended
-            Node * newNode = new Node;
-            link(_tail, newNode);
-            return _tail = newNode;
+            return _head = _tail = append;
+        } else {
+            link(_tail, append);
+            return _tail = append;
         }
         
 //        Node *newNode = new Node;
@@ -190,14 +219,13 @@ namespace std {
     _IMPL(typename _ULL::Node*) appendNewHeadNode() {
         ++_nodeCount;
         
+        Node * append = newNode();
+        
         if(!_head) { // emptyness
-            return _head = _tail = new Node;
-        } else if(_head -> _prev) {
-            return _head = _head -> _prev;
+            return _head = _tail = append;
         } else {
-            Node * newNode = new Node;
-            link(newNode, _head);
-            return _head = newNode;
+            link(append, _head);
+            return _head = append;
         }
         
 //        Node* newNode = new Node;
@@ -214,34 +242,58 @@ namespace std {
 //        return newNode;
     }
     
-    _TEMPL void UnrolledLinkedList<T, nodeSize>::deleteNode(Node* node) {
-        if(node -> _prev && node -> _next) { // fully unlink the node and link its neighbours
-            if(!node -> _prev) {
-                unlink(node, node -> _next);
-            } else if(!node -> _next) {
-                unlink(node -> _prev, node);
-            } else {
-                link(node -> _prev, node -> _next);
-            }
+    // must be non-cached node, moves the head and tail pointer
+    _IMPL(void) deleteNode(Node* node) {
+        if(node -> _prev && node -> _next) {
+            link(node -> _prev, node -> _next);
+        } else {
+            if(node -> _next) unlink(node, node -> _next);
+            if(node -> _prev) unlink(node -> _prev, node);
         }
+
         
+//        if(node -> _prev && node -> _next) { // fully unlink the node and link its neighbours
+//            if(!node -> _prev) {
+//                unlink(node, node -> _next);
+//            } else if(!node -> _next) {
+//                unlink(node -> _prev, node);
+//            } else {
+//                link(node -> _prev, node -> _next);
+//            }
+//        }
+//
         if(_tail == node) _tail = _tail -> _prev; // move the tail and head pointer to a correct position
         if(_head == node) _head = _head -> _next;
+            
         --_nodeCount; // decrease sizes
         _size -= node -> _size;
-        delete node;
+        
+        if(_cache) // if theres some space for cached resources, dont destroy
+            delete node;
+        else {
+            ~node();
+            pushResource(node);
+        }
     }
     
-    _TEMPL typename _ULL::Node* UnrolledLinkedList<T, nodeSize>::insertNewNodeAt(unsigned int at) {
+    _IMPL(typename _ULL::Node *) insertNewNodeAt(unsigned int at) {
         if(_nodeCount == 0) {
-            return _head = _tail = new Node;
+            
+            return _head = _tail = newNode();
+            
         } else if(at == 0) {
+            
             return appendNewHeadNode();
+            
         } else if(at >= _nodeCount) {
+            
             return appendNewTailNode();
+            
         } else {
-            Node* target = nodeAt(at);
-            return new Node{target -> prev, target};
+            Node* target = nodeAt(at), * insert = newNode();
+            link(insert, insert -> _next); // link right
+            link(insert -> _prev, insert); // link left
+            return insert;
         }
         
         ++_nodeCount;
